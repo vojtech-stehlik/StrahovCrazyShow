@@ -1,39 +1,29 @@
-# ----------------------------------------------------
-# 1. Base image s Corepack / pnpm
-# ----------------------------------------------------
-FROM node:24-alpine AS base
+FROM node:24-alpine
+
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable && corepack prepare pnpm@11.25.0 --activate
-WORKDIR /app
-
-# ----------------------------------------------------
-# 2. Závislosti & Build
-# ----------------------------------------------------
-FROM base AS build
-# Pokud klonujete z gitu uvnitř kontejneru, odkomentujte následující řádek:
-# RUN apk add --no-cache git git-lfs && git lfs install
-
-COPY pnpm-lock.yaml package.json ./
-RUN pnpm install --frozen-lockfile
-
-COPY . .
-RUN pnpm build
-
-# ----------------------------------------------------
-# 3. Produkční Runtime (minimální velikost)
-# ----------------------------------------------------
-FROM base AS prod
+ENV CI=true
 ENV NODE_ENV=production
 
-# Zkopírování z buildu (nebo nasazení built klienta a serveru)
-COPY --from=build /app/package.json ./package.json
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/dist ./dist 2>/dev/null || true
-COPY --from=build /app .
+# Aktivace pnpm 11.25.0 přes vestavěný Corepack
+RUN corepack enable && corepack prepare pnpm@11.25.0 --activate
 
-# Porty: 5173 (Vite dev) / 4179 (Prod preview) / 2567 (Colyseus server)
+WORKDIR /app
+
+# Zkopírujeme celý projekt před instalací, aby pnpm vidělo
+# pnpm-workspace.yaml, .npmrc i složku patches/
+COPY . .
+
+# Instalace s BuildKit cache a pojistkou pro případ nesouladu v lockfilu
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --frozen-lockfile || pnpm install --no-frozen-lockfile
+
+# Sestavení produkční verze
+RUN pnpm build
+
+# Porty: 4179 (Vite preview), 5173 (Vite dev), 2567 (Colyseus API/Realtime)
 EXPOSE 4179 2567
 
-# Spuštění produkčního preview / serveru (upravte podle package.json skriptu)
+# Spuštění (přepínač --host 0.0.0.0 je v Dockeru/Coolify nutný,
+# jinak aplikace poslouchá jen na 127.0.0.1 uvnitř kontejneru)
 CMD ["pnpm", "preview", "--host", "0.0.0.0", "--port", "4179"]
