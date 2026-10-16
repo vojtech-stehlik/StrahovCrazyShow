@@ -1,11 +1,13 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+
 export default defineConfig({
   plugins: [react()],
   optimizeDeps: {
     entries: ["index.html", "client/**/*.ts", "client/**/*.tsx"],
   },
   server: {
+    allowedHosts: ["strahov.bandportal.cz", ".bandportal.cz"],
     // Reference downloads and audit snapshots contain their own tsconfig/index
     // files. Watching them forces unrelated live-game reloads during research.
     watch: {
@@ -29,6 +31,9 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/realtime/, ""),
       },
     },
+  },
+  preview: {
+    allowedHosts: ["strahov.bandportal.cz", ".bandportal.cz"],
   },
   build: { chunkSizeWarningLimit: 1100 },
 });
